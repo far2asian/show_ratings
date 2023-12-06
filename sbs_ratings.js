@@ -12,8 +12,6 @@ var content = "";
         const dom = new JSDOM(body);
 		const document = dom.window.document;
         for (const elem of document.querySelectorAll("[data-testid='tile']")){
-        // const num = document.querySelectorAll("[data-testid='tile']").length;
-        // document.querySelectorAll("[data-testid='tile']").forEach(async function(elem, index){
             let title_elem = elem.querySelector('h3');
             let title = title_elem.textContent;
             let genre_elem = elem.querySelector("span[class~='ellipsis']");
@@ -25,36 +23,21 @@ var content = "";
             let video_dom = new JSDOM(video_body);
             const video_doc = video_dom.window.document;
             expiry = video_doc.querySelector("div.MuiContainer-root span span").textContent;
-            let rt_path = title.toLowerCase().replaceAll(" ", "_").replaceAll(":","").replaceAll("\'","");
-            // console.log(rt_path);
-            let rt_url = "https://www.rottentomatoes.com/m/" + rt_path;
-            console.log(rt_url);
-            let rt_response = await fetch(rt_url);
-            let rt_body = await rt_response.text();
-            let rt_dom = new JSDOM(rt_body);
-            const rt_doc = rt_dom.window.document;
-            let scoreboard = rt_doc.getElementById("scoreDetails");
-            let audience = "";
-            let tomatometer = "";
+            let scoreboard = await getScoreboard(title, year);
+            let audience;
+            let tomatometer;
+            let score_json;
             if(scoreboard){
-                let score_json = JSON.parse(scoreboard.innerHTML);
-                // console.log(JSON.stringify(score_json, null, 4));
+                score_json = JSON.parse(scoreboard.innerHTML);
                 audience = score_json["scoreboard"]["audienceScore"]["value"] || "--";
                 tomatometer = score_json["scoreboard"]["tomatometerScore"]["value"] || "--";
             }
             else{
-                // console.log("Problem with: "+ title);
-                // console.log(rt_path);
-                // fs.writeFile(title + ".html", rt_body, function(err) {
-                //     if(err) {
-                //         return console.log(err);
-                //     }
-                //     console.log("The file was saved!");
-                // }); 
-                // console.log(scoreboard.innerHTML);
+                console.log("Couldn't find: "+ title);
+                continue;
             }
-            let info = " A: "+ audience + "% T: "+ tomatometer + "% " + expiry;
-            console.log( title + info);
+            let info = " T: "+ tomatometer + "% A: "+ audience + "% " + expiry;
+            console.log( title_elem.textContent +  info);
             genre_elem.textContent = info;
 
         }
@@ -63,25 +46,34 @@ var content = "";
 });
 })();
 
+async function getScoreboard(title, year){
+    let rt_search = "https://www.rottentomatoes.com/search?search=" + encodeURIComponent(title);
+    let rt_response = await fetch(rt_search);
+    let rt_body = await rt_response.text();
+    let rt_dom = new JSDOM(rt_body);
+    let rt_doc = rt_dom.window.document;
+    let scoreboard;
+    for (const elem of rt_doc.querySelectorAll("search-page-media-row")){
+        if (elem.getAttribute("releaseyear") == year){
+            let rt_url = elem.querySelector("a").href;
+            rt_response = await fetch(rt_url);
+            rt_body = await rt_response.text();
+            rt_dom = new JSDOM(rt_body);
+            rt_doc = rt_dom.window.document;
+            scoreboard = rt_doc.getElementById("scoreDetails");
+            break;
+        }
+    }
+    return scoreboard;
+}
+
 http.createServer(function (req, res) {
     const reqUrl = url.parse(req.url).pathname
     if(reqUrl == "/" || reqUrl == "" ){
         res.writeHead(200, {'Content-Type': 'text/html'});
         res.end(content);
     }
-    else if(reqUrl == "/ondemand/static/ac4c223b/js/runtime.js"){
-        request( {uri:"https://www.sbs.com.au" + reqUrl},
-        function(error, response, body){
-            res.end(body);
-        });
-    }
-    else if(reqUrl == "/ondemand/static/ac4c223b/js/client.js"){
-        request( {uri:"https://www.sbs.com.au" + reqUrl},
-        function(error, response, body){
-            res.end(body);
-        });
-    }    
-    else if(reqUrl == "/ondemand/static/ac4c223b/js/662.js"){
+    else if(reqUrl.includes( "runtime.js") || reqUrl.includes( "client.js") || reqUrl.includes( "662.js")){
         request( {uri:"https://www.sbs.com.au" + reqUrl},
         function(error, response, body){
             res.end(body);
